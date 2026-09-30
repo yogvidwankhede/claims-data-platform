@@ -1,0 +1,16 @@
+source: eligibility
+description: Full member roster (834-like) delivered daily; changes over time feed the member history (SCD2).
+owner: enrollment-system
+delivery: daily full snapshot
+primary_key: [member_id]
+schema_evolution: additive
+columns:
+  - {name: member_id,         type: string, required: true}
+  - {name: first_name,        type: string, required: true,  pii: true}
+  - {name: last_name,         type: string, required: true,  pii: true}
+  - {name: birth_date,        type: date,   required: true,  pii: true}
+  - {name: gender,            type: string, required: true,  allowed: [F, M]}
+  - {name: zip3,              type: string, required: true}
+  - {name: line_of_business,  type: string, required: true,  allowed: [COMMERCIAL, MEDICARE, MEDICAID]}
+  - {name: coverage_start,    type: date,   required: true}
+  - {name: coverage_end,      type: date,   required: false}

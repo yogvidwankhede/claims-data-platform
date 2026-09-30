@@ -1,0 +1,12 @@
+source: providers
+description: Provider reference data, full snapshot daily.
+owner: provider-data-management
+delivery: daily full snapshot
+primary_key: [npi]
+schema_evolution: additive
+columns:
+  - {name: npi,            type: string, required: true}
+  - {name: provider_name,  type: string, required: true}
+  - {name: specialty,      type: string, required: true}
+  - {name: state,          type: string, required: true}
+  - {name: is_facility,    type: bool,   required: true}

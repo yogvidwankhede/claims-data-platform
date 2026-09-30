@@ -1,0 +1,16 @@
+source: pharmacy_claims
+description: Pharmacy fills (NCPDP-like), one row per fill.
+owner: pbm-vendor
+delivery: daily incremental
+primary_key: [rx_claim_id]
+schema_evolution: additive
+columns:
+  - {name: rx_claim_id,     type: string,  required: true}
+  - {name: member_id,       type: string,  required: true}
+  - {name: ndc,             type: string,  required: true}
+  - {name: drug_name,       type: string,  required: true}
+  - {name: fill_date,       type: date,    required: true}
+  - {name: days_supply,     type: int,     required: true}
+  - {name: quantity,        type: int,     required: true}
+  - {name: paid_amount,     type: decimal, required: true}
+  - {name: prescriber_npi,  type: string,  required: true}

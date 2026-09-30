@@ -1,0 +1,29 @@
+source: medical_claims
+description: Adjudicated medical claim lines (837-like, flattened), one row per claim line per claim version.
+owner: claims-vendor
+delivery: daily incremental
+primary_key: [claim_id, claim_version, line_number]
+# additive: new optional columns may appear (recorded as drift); removing or retyping a column rejects the delivery
+schema_evolution: additive
+columns:
+  - {name: claim_id,          type: string,  required: true}
+  - {name: claim_version,     type: int,     required: true}
+  - {name: claim_status,      type: string,  required: true, allowed: [PAID, DENIED, REVERSED]}
+  - {name: claim_type,        type: string,  required: true, allowed: [PROFESSIONAL, INSTITUTIONAL]}
+  - {name: member_id,         type: string,  required: true}
+  - {name: billing_npi,       type: string,  required: true}
+  - {name: service_from,      type: date,    required: true}
+  - {name: service_to,        type: date,    required: true}
+  - {name: admit_date,        type: date,    required: false}
+  - {name: discharge_date,    type: date,    required: false}
+  - {name: place_of_service,  type: string,  required: true}
+  - {name: primary_dx,        type: string,  required: true}
+  - {name: secondary_dx,      type: string,  required: false}
+  - {name: line_number,       type: int,     required: true}
+  - {name: procedure_code,    type: string,  required: true}
+  - {name: units,             type: int,     required: true}
+  - {name: billed_amount,     type: decimal, required: true}
+  - {name: allowed_amount,    type: decimal, required: true}
+  - {name: paid_amount,       type: decimal, required: true}
+  - {name: paid_date,         type: date,    required: true}
+  - {name: rendering_npi,     type: string,  required: false, since_schema_version: 2}

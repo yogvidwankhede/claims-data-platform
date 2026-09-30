@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claims-data-platform"
+version = "0.1.0"
+description = "Healthcare claims data platform: Airflow orchestration, Spark/Delta lakehouse, Snowflake warehouse, dbt analytics"
+requires-python = ">=3.10"
+authors = [{ name = "Yogvid Wankhede" }]
+license = { text = "Apache-2.0" }
+dependencies = [
+  "pyarrow>=16",
+  "pandas>=2.1",
+  "pyyaml>=6",
+  "duckdb>=1.1",
+]
+
+[project.optional-dependencies]
+spark = ["pyspark==4.0.*", "delta-spark==4.0.*"]
+dbt = ["dbt-core==1.10.*", "dbt-duckdb==1.9.*"]
+snowflake = ["snowflake-connector-python>=3.10", "dbt-snowflake==1.10.*"]
+dev = ["claims-data-platform[spark,dbt]", "pytest>=8", "ruff==0.15.11", "sqlfluff==3.5.0", "fakesnow>=0.11"]
+
+[project.scripts]
+claims-platform = "claims_platform.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+  "spark: needs a local Spark session",
+  "delta: needs Delta Lake jars (fetched from Maven at session start)",
+]
+filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning", "ignore::FutureWarning"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = ["dbt/target", "dbt/dbt_packages"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+ignore = ["B905"]
