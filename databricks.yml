@@ -1,0 +1,45 @@
+# Databricks Asset Bundle: deploys the lakehouse steps as a Databricks Job running
+# the same `claims-platform` CLI (packaged as a wheel) that Airflow and CI run.
+#
+#   databricks bundle validate -t dev
+#   databricks bundle deploy   -t dev
+#   databricks bundle run      claims_lakehouse_daily -t dev --params batch_date=2026-01-05
+#
+# In production Airflow triggers this job (DatabricksRunNowOperator) instead of
+# running Spark on its own workers; the job has no schedule of its own.
+bundle:
+  name: claims-data-platform
+
+variables:
+  catalog:
+    description: Unity Catalog catalog holding the bronze and silver schemas
+    default: claims_dev
+  landing_volume:
+    description: UC volume the vendors deliver to (CLAIMS_DATA_DIR on Databricks)
+    default: /Volumes/claims_dev/landing/files
+  node_type:
+    default: i3.xlarge
+
+artifacts:
+  platform_wheel:
+    type: whl
+    build: python -m build --wheel
+    path: .
+
+include:
+  - databricks/*.yml
+
+targets:
+  dev:
+    mode: development
+    default: true
+  prod:
+    mode: production
+    variables:
+      catalog: claims_prod
+      landing_volume: /Volumes/claims_prod/landing/files
+    run_as:
+      service_principal_name: claims-platform-sp
+    permissions:
+      - group_name: claims-data-engineers
+        level: CAN_MANAGE_RUN

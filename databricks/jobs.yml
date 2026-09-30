@@ -1,0 +1,108 @@
+resources:
+  jobs:
+    claims_lakehouse_daily:
+      name: claims-lakehouse-daily
+      description: Validate, land and conform one day of vendor claims deliveries into Unity Catalog Delta tables.
+      max_concurrent_runs: 1  # the SCD2 roster must be built in date order
+      parameters:
+        - name: batch_date
+          default: "{{job.start_time.iso_date}}"
+      email_notifications:
+        on_failure: [claims-data-oncall@example.com]
+      health:
+        rules:
+          - metric: RUN_DURATION_SECONDS
+            op: GREATER_THAN
+            value: 5400
+
+      job_clusters:
+        - job_cluster_key: lakehouse
+          new_cluster:
+            spark_version: 17.3.x-scala2.13  # Databricks Runtime 17.3 LTS = Spark 4.0
+            node_type_id: ${var.node_type}
+            data_security_mode: SINGLE_USER  # Unity Catalog
+            autoscale: {min_workers: 1, max_workers: 4}
+            spark_env_vars:
+              CLAIMS_CATALOG: ${var.catalog}
+              CLAIMS_DATA_DIR: ${var.landing_volume}
+
+      tasks:
+        - task_key: validate
+          for_each_task:
+            inputs: '["eligibility", "providers", "medical_claims", "pharmacy_claims"]'
+            concurrency: 4
+            task:
+              task_key: validate_source
+              job_cluster_key: lakehouse
+              python_wheel_task:
+                package_name: claims_data_platform
+                entry_point: claims-platform
+                parameters: [validate, --source, "{{input}}", --date, "{{job.parameters.batch_date}}"]
+              libraries:
+                - whl: ./dist/*.whl
+
+        - task_key: bronze
+          depends_on: [{task_key: validate}]
+          for_each_task:
+            inputs: '["eligibility", "providers", "medical_claims", "pharmacy_claims"]'
+            concurrency: 4
+            task:
+              task_key: bronze_source
+              job_cluster_key: lakehouse
+              max_retries: 2
+              min_retry_interval_millis: 120000
+              python_wheel_task:
+                package_name: claims_data_platform
+                entry_point: claims-platform
+                parameters: [bronze, --source, "{{input}}", --date, "{{job.parameters.batch_date}}"]
+              libraries:
+                - whl: ./dist/*.whl
+
+        - task_key: silver
+          depends_on: [{task_key: bronze}]
+          job_cluster_key: lakehouse
+          max_retries: 2
+          min_retry_interval_millis: 120000
+          python_wheel_task:
+            package_name: claims_data_platform
+            entry_point: claims-platform
+            parameters: [silver, --date, "{{job.parameters.batch_date}}"]
+          libraries:
+            - whl: ./dist/*.whl
+
+        - task_key: publish
+          depends_on: [{task_key: silver}]
+          job_cluster_key: lakehouse
+          max_retries: 2
+          min_retry_interval_millis: 120000
+          python_wheel_task:
+            package_name: claims_data_platform
+            entry_point: claims-platform
+            parameters: [publish, --date, "{{job.parameters.batch_date}}"]
+          libraries:
+            - whl: ./dist/*.whl
+
+    claims_lakehouse_maintenance:
+      name: claims-lakehouse-maintenance
+      description: Weekly OPTIMIZE + ZORDER BY member_id on the silver claim tables.
+      schedule:
+        quartz_cron_expression: "0 0 2 ? * SUN"
+        timezone_id: UTC
+      tasks:
+        - task_key: optimize
+          job_cluster_key: maintenance
+          python_wheel_task:
+            package_name: claims_data_platform
+            entry_point: claims-platform
+            parameters: [optimize]
+          libraries:
+            - whl: ./dist/*.whl
+      job_clusters:
+        - job_cluster_key: maintenance
+          new_cluster:
+            spark_version: 17.3.x-scala2.13
+            node_type_id: ${var.node_type}
+            data_security_mode: SINGLE_USER
+            num_workers: 2
+            spark_env_vars:
+              CLAIMS_CATALOG: ${var.catalog}
