@@ -8,6 +8,8 @@ developer at a terminal all run the same commands:
     claims-platform publish  --date 2026-01-05
     claims-platform run-day  --date 2026-01-05          # all of the above, in order
     claims-platform restore  --table silver/medical_claims_current --version 12
+    claims-platform dq-report --date 2026-01-05         # scorecard; exit 3 if degraded
+    claims-platform migrate  --dry-run                  # Snowflake platform-as-code
 
 Exit code is non-zero on any failure, including a rejected delivery, so the
 orchestrator stops downstream work for that day.
@@ -104,6 +106,28 @@ def cmd_restore(a) -> int:
     return 0
 
 
+def cmd_dq_report(a) -> int:
+    from dataclasses import asdict
+
+    from .quality import build
+
+    card = build(a.date)
+    _print(asdict(card))
+    return 0 if card.status == "PASS" else 3
+
+
+def cmd_migrate(a) -> int:
+    from .warehouse.load import snowflake_connection
+    from .warehouse.migrate import migrate
+
+    con = snowflake_connection(role=a.deploy_role, database="")
+    try:
+        _print(migrate(con, dry_run=a.dry_run, deploy_role=a.deploy_role))
+    finally:
+        con.close()
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         prog="claims-platform", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -119,16 +143,20 @@ def main(argv=None) -> int:
         p = sub.add_parser(name)
         p.add_argument("--source", required=True, choices=SOURCES)
         p.add_argument("--date", required=True)
-    for name in ("silver", "publish", "run-day"):
+    for name in ("silver", "publish", "run-day", "dq-report"):
         sub.add_parser(name).add_argument("--date", required=True)
     sub.add_parser("optimize")
     r = sub.add_parser("restore")
     r.add_argument("--table", required=True, help="layer/name, e.g. silver/medical_claims_current")
     r.add_argument("--version", type=int, required=True)
+    m = sub.add_parser("migrate", help="apply pending snowflake/migrations in order")
+    m.add_argument("--dry-run", action="store_true")
+    m.add_argument("--deploy-role", default="ACCOUNTADMIN", help="role the deploy user connects as")
     a = ap.parse_args(argv)
     handler = {
         "generate": cmd_generate, "validate": cmd_validate, "bronze": cmd_bronze, "silver": cmd_silver,
         "publish": cmd_publish, "run-day": cmd_run_day, "optimize": cmd_optimize, "restore": cmd_restore,
+        "migrate": cmd_migrate, "dq-report": cmd_dq_report,
     }[a.cmd]  # fmt: skip
     return handler(a)
 
