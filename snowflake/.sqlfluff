@@ -1,0 +1,7 @@
+[sqlfluff]
+dialect = snowflake
+max_line_length = 120
+exclude_rules = CP02, RF04, ST06, AM04, LT02
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = upper

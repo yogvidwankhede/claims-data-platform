@@ -65,57 +65,72 @@ def _load_duckdb(day: str, tables: tuple[str, ...]) -> dict:
     return counts
 
 
-def snowflake_connection():
+def snowflake_connection(role: str | None = None, database: str | None = None):
     """Key-pair auth from the environment (no passwords in code or Airflow variables)."""
     import snowflake.connector
 
-    return snowflake.connector.connect(
-        account=os.environ["SNOWFLAKE_ACCOUNT"],
-        user=os.environ["SNOWFLAKE_USER"],
-        private_key_file=os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"],
-        role=os.environ.get("SNOWFLAKE_ROLE", "LOADER"),
-        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "LOAD_WH"),
-        database=os.environ.get("SNOWFLAKE_RAW_DATABASE", "RAW"),
-        schema="CLAIMS",
+    kwargs = {
+        "account": os.environ["SNOWFLAKE_ACCOUNT"],
+        "user": os.environ["SNOWFLAKE_USER"],
+        "private_key_file": os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"],
+        "role": role or os.environ.get("SNOWFLAKE_ROLE", "LOADER"),
+        "warehouse": os.environ.get("SNOWFLAKE_WAREHOUSE", "LOAD_WH"),
+    }
+    database = os.environ.get("SNOWFLAKE_RAW_DATABASE", "RAW") if database is None else database
+    if database:  # "" = no default database (migrations create them)
+        kwargs["database"] = database
+    return snowflake.connector.connect(**kwargs)
+
+
+def snowflake_statements(table: str, files: list[Path], day: str) -> list[tuple[str, tuple]]:
+    """The exact statements run for one table, as (sql, params); kept separate so
+    tests can assert on them.
+
+    REMOVE first: a stage folder still holding yesterday's extra file would
+    otherwise be loaded alongside today's. The reload and its audit row commit
+    together, so the audit table never claims a load that was rolled back.
+    """
+    stage = f"@RAW.CLAIMS.EXCHANGE/{table}/"
+    target = f"RAW.CLAIMS.{table.upper()}"
+    puts = [(f"PUT 'file://{f.as_posix()}' {stage} OVERWRITE = TRUE AUTO_COMPRESS = FALSE", ()) for f in files]
+    return (
+        [(f"REMOVE {stage}", ())]
+        + puts
+        + [
+            ("BEGIN", ()),
+            (f"DELETE FROM {target}", ()),
+            (
+                f"COPY INTO {target} FROM {stage} "
+                "FILE_FORMAT = (FORMAT_NAME = RAW.CLAIMS.PARQUET_FF) "
+                "MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE FORCE = TRUE ON_ERROR = ABORT_STATEMENT",
+                (),
+            ),
+            (
+                "INSERT INTO RAW.CLAIMS._LOAD_AUDIT (TABLE_NAME, BATCH_DATE, ROW_COUNT, LOADED_AT) "
+                f"SELECT %s, %s, COUNT(*), CURRENT_TIMESTAMP() FROM {target}",
+                (table, day),
+            ),
+            ("COMMIT", ()),
+        ]
     )
 
 
-def snowflake_statements(table: str, files: list[Path]) -> list[str]:
-    """The exact statements run for one table; kept separate so tests can assert on them."""
-    stage = f"@RAW.CLAIMS.EXCHANGE/{table}/"
-    puts = [f"PUT 'file://{f.as_posix()}' {stage} OVERWRITE = TRUE AUTO_COMPRESS = FALSE" for f in files]
-    return puts + [
-        "BEGIN",
-        f"DELETE FROM RAW.CLAIMS.{table.upper()}",
-        (
-            f"COPY INTO RAW.CLAIMS.{table.upper()} FROM {stage} "
-            "FILE_FORMAT = (FORMAT_NAME = RAW.CLAIMS.PARQUET_FF) "
-            "MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE FORCE = TRUE ON_ERROR = ABORT_STATEMENT"
-        ),
-        "COMMIT",
-    ]
-
-
-def _load_snowflake(day: str, tables: tuple[str, ...]) -> dict:
-    con = snowflake_connection()
+def _load_snowflake(day: str, tables: tuple[str, ...], con=None) -> dict:
+    con = con or snowflake_connection()
     counts = {}
     try:
         cur = con.cursor()
         for t in tables:
             files = sorted((paths().exchange / t).glob("*.parquet"))
+            if not files:
+                raise FileNotFoundError(f"nothing exported for {t}; run the export step first")
             try:
-                for sql in snowflake_statements(t, files):
-                    cur.execute(sql)
+                for sql, params in snowflake_statements(t, files, day):
+                    cur.execute(sql, params or None)
             except Exception:
                 cur.execute("ROLLBACK")
                 raise
-            n = cur.execute(f"SELECT COUNT(*) FROM RAW.CLAIMS.{t.upper()}").fetchone()[0]
-            cur.execute(
-                "INSERT INTO RAW.CLAIMS._LOAD_AUDIT (TABLE_NAME, BATCH_DATE, ROW_COUNT, LOADED_AT) "
-                "VALUES (%s, %s, %s, CURRENT_TIMESTAMP())",
-                (t, day, n),
-            )
-            counts[t] = n
+            counts[t] = cur.execute(f"SELECT COUNT(*) FROM RAW.CLAIMS.{t.upper()}").fetchone()[0]
     finally:
         con.close()
     return counts
