@@ -110,8 +110,25 @@ def eligibility_expectations(contract: dict) -> list[Expectation]:
     )
 
 
-def provider_expectations(contract: dict, npi_valid: Column) -> list[Expectation]:
-    return required_not_null(contract) + [Expectation("npi_check_digit", npi_valid)]
+def npi_is_valid(col: Column) -> Column:
+    """NPI check digit (Luhn over "80840" + first 9 digits) as a native Spark
+    expression. A Python UDF would ship every row to a Python worker; this stays
+    in the JVM and is optimised like any other column expression. The "80840"
+    prefix always contributes 24 to the Luhn sum; in the 9 body digits the
+    even positions (0-based) are doubled."""
+    s = F.coalesce(col, F.lit(""))
+    total = F.lit(24)
+    for p in range(9):
+        d = F.substring(s, p + 1, 1).cast("int")
+        if p % 2 == 0:
+            d = F.when(d * 2 > 9, d * 2 - 9).otherwise(d * 2)
+        total = total + d
+    check = (F.lit(10) - total % 10) % 10
+    return F.coalesce(s.rlike(r"^[0-9]{10}$") & (check == F.substring(s, 10, 1).cast("int")), F.lit(False))
+
+
+def provider_expectations(contract: dict) -> list[Expectation]:
+    return required_not_null(contract) + [Expectation("npi_check_digit", npi_is_valid(F.col("npi")))]
 
 
 def apply_expectations(df: DataFrame, expectations: list[Expectation]) -> tuple[DataFrame, DataFrame]:

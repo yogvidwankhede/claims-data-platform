@@ -8,6 +8,7 @@ addresses <catalog>.<layer>.<name> instead. Nothing else changes.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession
 
@@ -17,7 +18,10 @@ from ..config import paths
 def get_spark(app: str = "claims-platform", delta: bool = True) -> SparkSession:
     active = SparkSession.getActiveSession()
     if active is not None:
-        return active
+        has_delta = "DeltaSparkSessionExtension" in active.conf.get("spark.sql.extensions", "")
+        if has_delta or not delta:
+            return active
+        active.stop()  # a plain session can't do Delta; replace it
     builder = (
         SparkSession.builder.appName(app)
         .master(os.environ.get("SPARK_MASTER", "local[2]"))
@@ -29,10 +33,19 @@ def get_spark(app: str = "claims-platform", delta: bool = True) -> SparkSession:
     if delta:
         from delta import configure_spark_with_delta_pip
 
-        builder = builder.config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension").config(
-            "spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+        builder = (
+            builder.config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+            # Delta rebuilds table state from its log with 50 tasks by default, sized for
+            # clusters; on a laptop or CI runner that overhead dominates small tables.
+            .config("spark.databricks.delta.snapshotPartitions", os.environ.get("DELTA_SNAPSHOT_PARTITIONS", "2"))
         )
-        builder = configure_spark_with_delta_pip(builder)  # resolves the Delta jars from Maven
+        jars_dir = os.environ.get("DELTA_JARS_DIR")
+        if jars_dir:  # offline: pre-downloaded, checksum-verified jars (no Maven access)
+            jars = ",".join(str(p) for p in sorted(Path(jars_dir).glob("*.jar")))
+            builder = builder.config("spark.jars", jars)
+        else:
+            builder = configure_spark_with_delta_pip(builder)  # resolves the Delta jars from Maven
     spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel("ERROR")
     return spark
@@ -76,4 +89,11 @@ def writer(df: DataFrame, layer: str, name: str, mode: str, partition_by: list[s
     for k, v in options.items():
         w = w.option(k, v)
     tid = table_id(layer, name)
-    return (lambda: w.saveAsTable(tid)) if catalog() else (lambda: w.save(tid))
+    if not catalog():
+        return lambda: w.save(tid)
+
+    def save_managed() -> None:
+        df.sparkSession.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog()}.{layer}")
+        w.saveAsTable(tid)
+
+    return save_managed

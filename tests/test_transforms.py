@@ -114,3 +114,21 @@ def test_npi_check_digit():
     assert is_valid_npi("1234567893")  # the CMS documentation example
     assert not is_valid_npi("1234567890")
     assert not is_valid_npi("12345")
+
+
+def test_spark_npi_expression_matches_python_reference(spark):
+    import random
+
+    from claims_platform.generator import npi_check_digit
+
+    rng = random.Random(3)
+    samples = []
+    for _ in range(500):
+        body = "".join(str(rng.randint(0, 9)) for _ in range(9))
+        samples.append(body + str(npi_check_digit(body)))  # valid
+        samples.append(body + str((npi_check_digit(body) + rng.randint(1, 9)) % 10))  # wrong check digit
+    samples += ["12345", "", None, "12345678X3", "12345678931"]
+    df = spark.createDataFrame([(s,) for s in samples], "npi string")
+    got = {r.npi: r.ok for r in df.select("npi", T.npi_is_valid(F.col("npi")).alias("ok")).collect()}
+    for s in samples:
+        assert got[s] == (s is not None and is_valid_npi(s)), s

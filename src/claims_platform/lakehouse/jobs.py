@@ -18,11 +18,9 @@ from datetime import datetime, timezone
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql.types import BooleanType
 
 from ..config import paths
 from ..contracts import load_contract
-from ..generator import is_valid_npi
 from . import transforms as T
 from .spark import delta_table, read_table, table_exists, writer
 
@@ -87,13 +85,10 @@ def build_members(spark: SparkSession, day: str) -> dict:
     )
 
 
-npi_ok = F.udf(lambda s: bool(s) and is_valid_npi(s), BooleanType())
-
-
 def build_providers(spark: SparkSession, day: str) -> dict:
     contract = load_contract("providers")
     typed = T.cast_to_contract(T.dedupe_exact(_bronze_batch(spark, "providers", day)), contract)
-    valid, bad = T.apply_expectations(typed, T.provider_expectations(contract, npi_ok(F.col("npi"))))
+    valid, bad = T.apply_expectations(typed, T.provider_expectations(contract))
     _overwrite(spark, valid.drop("_row_hash"), "silver", "providers")
     return _record(
         "silver_providers", day, rows=valid.count(), quarantined=_write_quarantine(spark, "providers", day, bad)
@@ -188,6 +183,7 @@ PUBLISHED = {
         "line_of_business",
         "coverage_start",
         "coverage_end",
+        "_batch_date",  # roster date: dbt's member snapshot uses it as the SCD2 effective date
     ],  # fmt: skip
     "providers": ["npi", "provider_name", "specialty", "state", "is_facility"],
     "medical_claims_current": [
