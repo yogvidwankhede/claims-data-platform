@@ -55,6 +55,7 @@ local-mode Spark:
 | Member plan/address changes captured as SCD2 versions | 68 |
 | DQ scorecard | PASS on all 10 days (max medical quarantine rate 0.43%, day 1) |
 | Replaying the last day, then `dbt build` | marts, snapshot and paid totals unchanged |
+| Same day again through Airflow (`airflow dags test claims_daily 2026-01-10`) | all 17 task instances succeeded; marts unchanged |
 | Time per day, lakehouse steps | ~95 s |
 
 The data is synthetic, generated with realistic failure modes (see
@@ -132,6 +133,10 @@ docs/                    architecture, ADRs, runbook
   structurally (every task maps to a real CLI invocation), not with `databricks
   bundle deploy`. dbt contracts are verified on DuckDB. Their data types are
   written to be valid on Snowflake too, but they have not been run there.
+- On Airflow 3.3.2, `airflow dags test` runs every task and then raises an error
+  while clearing the DAG's deadline alert. The command expects alert IDs that only
+  the DAG processor assigns, so this is a limitation of the test command, not of the
+  DAG. Scheduler runs are unaffected.
 - In production, Airflow would trigger the Databricks job (`DatabricksRunNowOperator`)
   instead of running Spark on its workers. The CLI calls stay the same (ADR 0001).
 - The warehouse reload rewrites each RAW table, which is fine at this volume. At
