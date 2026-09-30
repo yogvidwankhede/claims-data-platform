@@ -161,5 +161,12 @@ def main(argv=None) -> int:
     return handler(a)
 
 
-if __name__ == "__main__":
+def run() -> None:
+    """Console-script entry point. Raises SystemExit so the exit code reaches every
+    runner: a shell, Airflow's BashOperator, and Databricks' python_wheel_task,
+    which ignores an entry point's return value."""
     raise SystemExit(main())
+
+
+if __name__ == "__main__":
+    run()

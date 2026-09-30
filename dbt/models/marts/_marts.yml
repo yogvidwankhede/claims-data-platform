@@ -67,6 +67,12 @@ models:
         data_tests:
           - relationships:
               arguments: {to: ref('dim_members'), field: member_id}
+      - name: line_of_business
+        data_type: varchar
+        description: Plan in force in the service month; drives row access.
+        data_tests:
+          - not_null:
+              config: {severity: warn}
       - name: billing_npi
         data_type: varchar
         data_tests:

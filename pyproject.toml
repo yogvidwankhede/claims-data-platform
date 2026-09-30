@@ -20,10 +20,10 @@ dependencies = [
 spark = ["pyspark==4.0.*", "delta-spark==4.0.*"]
 dbt = ["dbt-core==1.12.*", "dbt-duckdb==1.11.*"]
 snowflake = ["snowflake-connector-python>=3.10", "dbt-snowflake==1.12.*"]
-dev = ["claims-data-platform[spark,dbt]", "pytest>=8", "ruff==0.16.9", "sqlfluff==3.5.0", "fakesnow==0.11.*", "snowflake-connector-python>=3.10"]
+dev = ["claims-data-platform[spark,dbt]", "pytest>=8", "build>=1.2", "ruff==0.16.9", "sqlfluff==3.5.0", "fakesnow==0.11.*", "snowflake-connector-python>=3.10"]
 
 [project.scripts]
-claims-platform = "claims_platform.cli:main"
+claims-platform = "claims_platform.cli:run"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,7 +1,9 @@
 -- Governance is attached to data, not to queries: PII columns carry a tag, the tag
 -- carries a masking policy, so any new column tagged PII is masked with no extra work
 -- (dbt applies the same tag to mart columns). Row access limits analysts to the lines
--- of business they are entitled to.
+-- of business they are entitled to. Every statement is safe to re-run (IF NOT EXISTS,
+-- SET TAG overwrites, FORCE replaces a tag's policy), so a partial apply can be retried.
+-- Tags, masking and row access policies need Snowflake Enterprise edition or higher.
 USE ROLE GOVERNANCE_ADMIN;
 
 CREATE SCHEMA IF NOT EXISTS GOVERNANCE.POLICIES WITH MANAGED ACCESS;
@@ -25,8 +27,8 @@ AS (val DATE) RETURNS DATE -> -- noqa: LT01
         ELSE DATE_FROM_PARTS(YEAR(val), 1, 1)
     END;
 
-ALTER TAG GOVERNANCE.POLICIES.PII SET MASKING POLICY GOVERNANCE.POLICIES.MASK_PII_STRING; -- noqa: PRS
-ALTER TAG GOVERNANCE.POLICIES.PII SET MASKING POLICY GOVERNANCE.POLICIES.MASK_PII_DATE; -- noqa: PRS
+ALTER TAG GOVERNANCE.POLICIES.PII SET MASKING POLICY GOVERNANCE.POLICIES.MASK_PII_STRING FORCE; -- noqa: PRS
+ALTER TAG GOVERNANCE.POLICIES.PII SET MASKING POLICY GOVERNANCE.POLICIES.MASK_PII_DATE FORCE; -- noqa: PRS
 
 ALTER TABLE RAW.CLAIMS.MEMBERS MODIFY COLUMN FIRST_NAME SET TAG GOVERNANCE.POLICIES.PII = 'name';
 ALTER TABLE RAW.CLAIMS.MEMBERS MODIFY COLUMN LAST_NAME SET TAG GOVERNANCE.POLICIES.PII = 'name';

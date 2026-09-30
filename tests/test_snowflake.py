@@ -190,3 +190,20 @@ def test_a_failed_copy_rolls_back_and_closes_the_connection(tmp_path, monkeypatc
     assert cur.executed[-1] == "ROLLBACK" and not any(s.startswith("COMMIT") for s in cur.executed)
     assert not any(s.startswith("INSERT INTO RAW.CLAIMS._LOAD_AUDIT") for s in cur.executed)
     assert con.closed
+
+
+def test_private_key_from_a_file_path_or_from_pem_in_the_environment(monkeypatch):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    monkeypatch.delenv("SNOWFLAKE_PRIVATE_KEY", raising=False)
+    monkeypatch.setenv("SNOWFLAKE_PRIVATE_KEY_PATH", "/keys/loader.p8")
+    assert load._private_key() == {"private_key_file": "/keys/loader.p8"}
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pem = key.private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
+    ).decode()
+    monkeypatch.setenv("SNOWFLAKE_PRIVATE_KEY", pem)  # e.g. a Databricks secret
+    der = load._private_key()["private_key"]
+    assert serialization.load_der_private_key(der, password=None).private_numbers() == key.private_numbers()

@@ -2,6 +2,8 @@
 -- member is admitted again within the window after discharge (all-cause; planned
 -- readmissions are not excluded). `window_complete` is false while the follow-up
 -- window is still open, and such stays are left out of the rates.
+{{ config(meta={'row_access_column': 'line_of_business'}) }}
+
 with stays as (
     select * from {{ ref('int_inpatient_stays') }}
 ),
@@ -26,6 +28,7 @@ next_admit as (
 select
     s.claim_id as index_claim_id,
     s.member_id,
+    mm.line_of_business,
     s.facility_npi,
     s.admit_date,
     s.discharge_date,
@@ -39,3 +42,6 @@ select
 from stays as s
 cross join data_end as d
 left join next_admit as n on s.claim_id = n.claim_id
+left join {{ ref('int_member_months') }} as mm
+    on s.member_id = mm.member_id
+    and cast({{ dbt.date_trunc('month', 's.admit_date') }} as date) = mm.month_start

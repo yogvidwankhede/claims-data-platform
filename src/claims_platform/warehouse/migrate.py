@@ -12,10 +12,10 @@ Rules the runner enforces:
     a change to production goes in a new version, never by rewriting history;
   * a gap or duplicate in version numbers is an error;
   * a failing script stops the run and is not recorded, so the next run retries it
-    (scripts are written with IF NOT EXISTS so a partial apply is safe to repeat).
+    from the top; scripts are therefore written to be re-runnable (IF NOT EXISTS,
+    overwriting SET TAG, ... FORCE).
 
-`claims-platform migrate --dry-run` prints the plan without touching anything; CI
-runs it against the change history of each environment before a deploy.
+`claims-platform migrate --dry-run` prints the pending scripts without changing anything.
 """
 
 from __future__ import annotations

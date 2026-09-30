@@ -17,6 +17,10 @@ from ..config import paths
 
 def get_spark(app: str = "claims-platform", delta: bool = True) -> SparkSession:
     active = SparkSession.getActiveSession()
+    if os.environ.get("DATABRICKS_RUNTIME_VERSION"):
+        # Databricks owns the session and its cluster config (Delta is built in):
+        # attach to it, never set a master or replace it
+        return active or SparkSession.builder.getOrCreate()
     if active is not None:
         has_delta = "DeltaSparkSessionExtension" in active.conf.get("spark.sql.extensions", "")
         if has_delta or not delta:

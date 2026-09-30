@@ -1,7 +1,9 @@
 """claims_maintenance: weekly Delta table maintenance (compaction + Z-order by member).
 
-Scheduled on Sunday, when no daily load runs against the same tables, because
-OPTIMIZE rewrites files that a concurrent MERGE may be reading.
+Runs Sunday 02:00 UTC with a 2h timeout, so it normally finishes before the 06:00
+daily run. If the two ever overlap (catch-up runs after an outage), Delta's
+optimistic concurrency makes one of the conflicting commits fail rather than
+corrupt data, and that task's retry re-runs it; pause this DAG during backfills.
 """
 
 from __future__ import annotations

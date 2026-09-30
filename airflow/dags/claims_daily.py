@@ -70,9 +70,11 @@ def cli(task_id: str, args: str, **kwargs) -> BashOperator:
     default_args=default_args,
     tags=["claims", "lakehouse", "warehouse", "dbt"],
     doc_md=__doc__,
-    # the business reads the marts at 12:00 UTC: alert on-call if a run is not done by then
+    # a run must finish within 6h of starting (06:00 -> 12:00 UTC, when the business
+    # reads the marts). Measured from queue time, not logical date, so catch-up runs
+    # after an outage don't all fire "missed" the moment they are created.
     deadline=DeadlineAlert(
-        reference=DeadlineReference.DAGRUN_LOGICAL_DATE,
+        reference=DeadlineReference.DAGRUN_QUEUED_AT,
         interval=timedelta(hours=6),
         callback=SyncCallback("claims_alerts.deadline_missed", kwargs={"dag_id": "claims_daily"}),
     ),

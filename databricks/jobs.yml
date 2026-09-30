@@ -25,6 +25,11 @@ resources:
             spark_env_vars:
               CLAIMS_CATALOG: ${var.catalog}
               CLAIMS_DATA_DIR: ${var.landing_volume}
+              # publish loads Snowflake RAW; credentials come from a secret scope
+              CLAIMS_WAREHOUSE: snowflake
+              SNOWFLAKE_ACCOUNT: "{{secrets/claims-platform/snowflake-account}}"
+              SNOWFLAKE_USER: "{{secrets/claims-platform/snowflake-loader-user}}"
+              SNOWFLAKE_PRIVATE_KEY: "{{secrets/claims-platform/snowflake-loader-private-key}}"
 
       tasks:
         - task_key: validate
@@ -39,7 +44,7 @@ resources:
                 entry_point: claims-platform
                 parameters: [validate, --source, "{{input}}", --date, "{{job.parameters.batch_date}}"]
               libraries:
-                - whl: ./dist/*.whl
+                - whl: ../dist/*.whl  # paths are relative to this file
 
         - task_key: bronze
           depends_on: [{task_key: validate}]
@@ -56,7 +61,7 @@ resources:
                 entry_point: claims-platform
                 parameters: [bronze, --source, "{{input}}", --date, "{{job.parameters.batch_date}}"]
               libraries:
-                - whl: ./dist/*.whl
+                - whl: ../dist/*.whl  # paths are relative to this file
 
         - task_key: silver
           depends_on: [{task_key: bronze}]
@@ -68,7 +73,7 @@ resources:
             entry_point: claims-platform
             parameters: [silver, --date, "{{job.parameters.batch_date}}"]
           libraries:
-            - whl: ./dist/*.whl
+            - whl: ../dist/*.whl  # paths are relative to this file
 
         - task_key: publish
           depends_on: [{task_key: silver}]
@@ -80,7 +85,8 @@ resources:
             entry_point: claims-platform
             parameters: [publish, --date, "{{job.parameters.batch_date}}"]
           libraries:
-            - whl: ./dist/*.whl
+            - whl: ../dist/*.whl  # paths are relative to this file
+            - pypi: {package: "snowflake-connector-python>=3.10"}
 
     claims_lakehouse_maintenance:
       name: claims-lakehouse-maintenance
@@ -96,7 +102,7 @@ resources:
             entry_point: claims-platform
             parameters: [optimize]
           libraries:
-            - whl: ./dist/*.whl
+            - whl: ../dist/*.whl  # paths are relative to this file
       job_clusters:
         - job_cluster_key: maintenance
           new_cluster:

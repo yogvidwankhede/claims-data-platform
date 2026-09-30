@@ -15,13 +15,17 @@ unit_tests:
       - input: ref('int_claims')
         rows:
           - {service_from: 2026-03-31}
+      - input: ref('int_member_months')
+        rows:
+          - {member_id: M1, month_start: 2026-01-01, line_of_business: MEDICARE}
     expect:
       rows:
-        - {index_claim_id: A1, readmitted_within_window: true, next_admit_date: 2026-02-04, window_complete: true}
-        - {index_claim_id: A2, readmitted_within_window: false, next_admit_date: null, window_complete: true}
-        - {index_claim_id: B1, readmitted_within_window: false, next_admit_date: null, window_complete: true}
-        - {index_claim_id: B2, readmitted_within_window: false, next_admit_date: null, window_complete: true}
-        - {index_claim_id: C1, readmitted_within_window: false, next_admit_date: null, window_complete: false}
+        - {index_claim_id: A1, readmitted_within_window: true, next_admit_date: 2026-02-04, window_complete: true,
+           line_of_business: MEDICARE}
+        - {index_claim_id: A2, readmitted_within_window: false, next_admit_date: null, window_complete: true, line_of_business: null}
+        - {index_claim_id: B1, readmitted_within_window: false, next_admit_date: null, window_complete: true, line_of_business: null}
+        - {index_claim_id: B2, readmitted_within_window: false, next_admit_date: null, window_complete: true, line_of_business: null}
+        - {index_claim_id: C1, readmitted_within_window: false, next_admit_date: null, window_complete: false, line_of_business: null}
 
   - name: pmpm_attributes_cost_to_the_plan_in_force_that_month
     description: >

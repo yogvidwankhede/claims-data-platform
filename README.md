@@ -7,7 +7,9 @@ A healthcare-claims data platform that runs **Airflow, a Spark/Delta lakehouse
 specific ways: claims that are adjusted and reversed weeks later, files that arrive
 late or twice, vendors who change their format, members who switch plans mid-year,
 and PHI that must never reach an analyst unmasked. Each of those cases is handled
-in code and covered by a test.
+in code and exercised by tests that run locally and in CI. What could not be run
+here (live Snowflake and Databricks) is listed under
+[what is not proven here](#production-notes-and-what-is-not-proven-here).
 
 ![architecture](docs/architecture.svg)
 
@@ -78,14 +80,16 @@ quarantine rate above 2% makes the day's scorecard DEGRADED and raises an alert.
 
 **Every step is idempotent.** Bronze replaces its day's partition (`replaceWhere`),
 silver MERGEs, the warehouse reload is a single transaction, and `fct_claims` is
-delete+insert on `claim_id`. CI replays the latest day and diffs the marts.
+delete+insert on `claim_id`. CI replays the latest day and checks that row counts
+and paid totals in the marts and the snapshot are unchanged.
 
 **PHI stays governed.** Names never leave RAW. Date of birth is tagged `PII` in RAW,
-and the dbt post-hook applies the same tag to the marts. The tag's masking policy
-generalises it to the birth year for anyone without `PHI_READER`. A row access
-policy limits analysts to their entitled lines of business. The loader never uses
-`SWAP`, which would drop the policies. A test fails if any contract column marked
-`pii: true` is left untagged.
+and a dbt post-hook applies the same tag in the snapshot and the marts. The tag's
+masking policy generalises it to the birth year for anyone without `PHI_READER`.
+Analysts can read only the `MARTS` schema, and every mart, including the claim-level
+facts, carries a line-of-business row access policy, so analysts see only the plans
+they are entitled to. The loader never uses `SWAP`, which would drop the policies.
+A test fails if any contract column marked `pii: true` is left untagged.
 [ADR 0004](docs/adr/0004-snowflake-reload-in-place-and-tag-based-masking.md)
 
 **Members change plans.** The dbt snapshot dates each version by the roster
@@ -105,7 +109,7 @@ src/claims_platform/     CLI, generator, contracts, lakehouse (Spark/Delta), war
 contracts/               YAML data contracts, one per vendor feed
 snowflake/migrations/    V001 compute + monitors · V002 roles/grants · V003 RAW tables · V004 masking + row access
 dbt/                     staging → snapshot → intermediate → marts; contracts, unit tests, exposures
-airflow/dags/            claims_daily · claims_maintenance · claims_marts_consumers
+airflow/dags/            claims_daily · claims_maintenance · claims_marts_consumers · claims_alerts (callbacks)
 databricks.yml           Asset Bundle; jobs in databricks/jobs.yml
 docs/                    architecture, ADRs, runbook
 ```
@@ -116,20 +120,24 @@ docs/                    architecture, ADRs, runbook
 |---|---|---|
 | Transforms on plain Spark (casts, expectations, dedupe, NPI check digit, ICD-10) | 14 | CI `unit` |
 | Delivery contracts (checksum, truncation, dropped/retyped column, drift) | 11 | CI `unit` |
-| Snowflake: migration runner on fakesnow, DDL ↔ contracts, PII tagging, loader statements, rollback | 10 | CI `unit` |
-| Databricks bundle: every job task is a valid CLI call | 7 | CI `unit` |
+| Snowflake: migration runner on fakesnow, DDL ↔ contracts, PII tagging, loader statements, rollback, key handling | 11 | CI `unit` |
+| Databricks bundle: every job task is a valid CLI call; paths, permissions, Snowflake config | 10 | CI `unit` |
 | DQ scorecard | 3 | CI `unit` |
 | Delta integration: replay no-op, late reversal, shrinking claim, drift, quarantine, restore, optimize | 7 | CI `delta` |
 | Airflow DAG integrity: order, retries, alerts, deadline, assets | 8 | CI `airflow` |
-| dbt: 51 data tests, 3 unit tests, 5 enforced contracts | | CI `lint` (parse) + `e2e` |
+| dbt: 52 data tests, 3 unit tests, 5 enforced contracts | | CI `lint` (parse) + `e2e` |
 | End to end: 3 days, then a replay of the latest day with a diff of the marts | | CI `e2e` |
 
 ## Production notes, and what is not proven here
 
 - **Snowflake and Databricks were not deployed.** Everything above ran locally, with
   DuckDB standing in for Snowflake. The Snowflake migration runner and RAW DDL
-  execute on fakesnow; account-level objects (warehouses, roles, policies) are
-  checked by sqlfluff and static tests only. The Databricks bundle is checked
+  execute on fakesnow. Account-level objects (warehouses, roles, policies) get only
+  sqlfluff and static tests, and sqlfluff can't parse the resource-monitor and
+  `ALTER TAG` statements, so those are excluded. The dbt governance post-hook is a
+  no-op on DuckDB, so masking and row access have never executed. Tags, masking
+  and row access policies, and multi-cluster warehouses, require Snowflake
+  Enterprise edition. The Databricks bundle is checked
   structurally (every task maps to a real CLI invocation), not with `databricks
   bundle deploy`. dbt contracts are verified on DuckDB. Their data types are
   written to be valid on Snowflake too, but they have not been run there.

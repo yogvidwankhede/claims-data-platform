@@ -37,6 +37,28 @@ def test_every_task_is_a_valid_cli_invocation(job_name, task, for_each, monkeypa
     assert called, f"{job_name}.{task['task_key']} did not dispatch"
 
 
+def test_wheel_paths_resolve_from_the_jobs_file():
+    # bundle paths are relative to the YAML file that declares them
+    text = (ROOT / "databricks" / "jobs.yml").read_text()
+    assert "./dist/" not in text.replace("../dist/", "")
+
+
+def test_permission_levels_are_valid_for_bundles():
+    bundle = yaml.safe_load((ROOT / "databricks.yml").read_text())
+    for target in bundle["targets"].values():
+        for p in target.get("permissions", []):
+            assert p["level"] in {"CAN_VIEW", "CAN_RUN", "CAN_MANAGE"}
+
+
+def test_publish_is_configured_for_snowflake():
+    jobs = yaml.safe_load((ROOT / "databricks" / "jobs.yml").read_text())["resources"]["jobs"]
+    daily = jobs["claims_lakehouse_daily"]
+    env = daily["job_clusters"][0]["new_cluster"]["spark_env_vars"]
+    assert env["CLAIMS_WAREHOUSE"] == "snowflake" and env["SNOWFLAKE_PRIVATE_KEY"].startswith("{{secrets/")
+    publish = next(t for t in daily["tasks"] if t["task_key"] == "publish")
+    assert any("snowflake-connector-python" in lib.get("pypi", {}).get("package", "") for lib in publish["libraries"])
+
+
 def test_jobs_run_one_day_at_a_time():
     jobs = yaml.safe_load((ROOT / "databricks" / "jobs.yml").read_text())["resources"]["jobs"]
     assert jobs["claims_lakehouse_daily"]["max_concurrent_runs"] == 1

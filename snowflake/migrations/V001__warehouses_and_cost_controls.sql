@@ -10,6 +10,13 @@ CREATE DATABASE IF NOT EXISTS GOVERNANCE COMMENT = 'Tags, masking and row access
 -- managed access: grants inside the schema are made centrally, not by object owners
 CREATE SCHEMA IF NOT EXISTS RAW.CLAIMS WITH MANAGED ACCESS;
 
+-- dbt's schemas exist up front so grants can be scoped per schema: analysts get
+-- MARTS only, never the snapshot or intermediate layers (which hold unaggregated data)
+CREATE SCHEMA IF NOT EXISTS ANALYTICS.STAGING;
+CREATE SCHEMA IF NOT EXISTS ANALYTICS.INTERMEDIATE;
+CREATE SCHEMA IF NOT EXISTS ANALYTICS.SNAPSHOTS;
+CREATE SCHEMA IF NOT EXISTS ANALYTICS.MARTS;
+
 CREATE WAREHOUSE IF NOT EXISTS LOAD_WH
     WAREHOUSE_SIZE = XSMALL
     AUTO_SUSPEND = 60

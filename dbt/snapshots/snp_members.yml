@@ -11,5 +11,11 @@ snapshots:
       strategy: check
       check_cols: [line_of_business, zip3, coverage_end]
       updated_at: roster_effective_at
-      hard_deletes: invalidate
+      # terminations arrive as coverage_end (a checked column), so a member dropping
+      # off the roster is ignored rather than closed with a wall-clock timestamp
+      hard_deletes: ignore
       dbt_valid_to_current: "cast('9999-12-31' as date)"
+      post_hook: "{{ apply_governance() }}"
+    columns:
+      - name: birth_date
+        meta: {pii: date_of_birth}

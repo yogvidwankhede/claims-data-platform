@@ -72,7 +72,7 @@ def snowflake_connection(role: str | None = None, database: str | None = None):
     kwargs = {
         "account": os.environ["SNOWFLAKE_ACCOUNT"],
         "user": os.environ["SNOWFLAKE_USER"],
-        "private_key_file": os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"],
+        **_private_key(),
         "role": role or os.environ.get("SNOWFLAKE_ROLE", "LOADER"),
         "warehouse": os.environ.get("SNOWFLAKE_WAREHOUSE", "LOAD_WH"),
     }
@@ -80,6 +80,19 @@ def snowflake_connection(role: str | None = None, database: str | None = None):
     if database:  # "" = no default database (migrations create them)
         kwargs["database"] = database
     return snowflake.connector.connect(**kwargs)
+
+
+def _private_key() -> dict:
+    """Key-pair credentials: a key file on disk (Airflow workers, laptops) or the PEM
+    itself in SNOWFLAKE_PRIVATE_KEY (a Databricks secret exposed as an env var)."""
+    pem = os.environ.get("SNOWFLAKE_PRIVATE_KEY")
+    if not pem:
+        return {"private_key_file": os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"]}
+    from cryptography.hazmat.primitives import serialization
+
+    key = serialization.load_pem_private_key(pem.encode(), password=None)
+    der = key.private_bytes(serialization.Encoding.DER, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    return {"private_key": der}
 
 
 def snowflake_statements(table: str, files: list[Path], day: str) -> list[tuple[str, tuple]]:
@@ -107,7 +120,9 @@ def snowflake_statements(table: str, files: list[Path], day: str) -> list[tuple[
             ),
             (
                 "INSERT INTO RAW.CLAIMS._LOAD_AUDIT (TABLE_NAME, BATCH_DATE, ROW_COUNT, LOADED_AT) "
-                f"SELECT %s, %s, COUNT(*), CURRENT_TIMESTAMP() FROM {target}",
+                # SYSDATE() is UTC; CURRENT_TIMESTAMP() into an NTZ column would store the
+                # session's local wall-clock time and skew dbt's freshness checks
+                f"SELECT %s, %s, COUNT(*), SYSDATE() FROM {target}",
                 (table, day),
             ),
             ("COMMIT", ()),

@@ -42,4 +42,6 @@ targets:
       service_principal_name: claims-platform-sp
     permissions:
       - group_name: claims-data-engineers
-        level: CAN_MANAGE_RUN
+        level: CAN_MANAGE
+      - group_name: claims-analysts
+        level: CAN_VIEW
