@@ -135,8 +135,8 @@ docs/                    architecture, ADRs, runbook
   written to be valid on Snowflake too, but they have not been run there.
 - On Airflow 3.3.2, `airflow dags test` runs every task and then raises an error
   while clearing the DAG's deadline alert. The command expects alert IDs that only
-  the DAG processor assigns, so this is a limitation of the test command, not of the
-  DAG. Scheduler runs are unaffected.
+  the DAG processor assigns when it serializes the DAG. A full scheduler run was
+  not part of this verification.
 - In production, Airflow would trigger the Databricks job (`DatabricksRunNowOperator`)
   instead of running Spark on its workers. The CLI calls stay the same (ADR 0001).
 - The warehouse reload rewrites each RAW table, which is fine at this volume. At
