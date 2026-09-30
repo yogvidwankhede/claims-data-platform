@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 620" width="1280" height="620" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrow-dash" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+    <style>
+      .zone { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1; }
+      .zone-title { font-size: 13px; font-weight: 700; fill: #0f172a; letter-spacing: .02em; }
+      .zone-sub { font-size: 11px; fill: #64748b; }
+      .box { fill: #ffffff; stroke: #94a3b8; stroke-width: 1.2; }
+      .box-title { font-size: 12.5px; font-weight: 600; fill: #0f172a; }
+      .box-text { font-size: 10.5px; fill: #475569; }
+      .gate { fill: #fff7ed; stroke: #ea580c; stroke-width: 1.2; }
+      .quar { fill: #fef2f2; stroke: #dc2626; stroke-width: 1.2; }
+      .gov { fill: #f0fdf4; stroke: #16a34a; stroke-width: 1.2; }
+      .flow { stroke: #475569; stroke-width: 1.6; fill: none; }
+      .ctrl { stroke: #94a3b8; stroke-width: 1.2; stroke-dasharray: 4 4; fill: none; }
+      .label { font-size: 10.5px; fill: #334155; }
+      .band { fill: #eef2ff; stroke: #6366f1; stroke-width: 1.2; }
+      .band-title { font-size: 13px; font-weight: 700; fill: #3730a3; }
+      .band-text { font-size: 11px; fill: #4338ca; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="620" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="40" y="38" font-size="20" font-weight="700" fill="#0f172a">Healthcare claims data platform</text>
+  <text x="40" y="60" font-size="12.5" fill="#64748b">Vendor feeds → contract gate → Delta lakehouse → Snowflake RAW → dbt marts, orchestrated by Airflow</text>
+
+  <!-- Airflow orchestration band -->
+  <rect class="band" x="40" y="80" width="1200" height="58" rx="8"/>
+  <text class="band-title" x="58" y="104">Apache Airflow 3 · claims_daily</text>
+  <text class="band-text" x="58" y="124">ingest[source] (sensor → validate → bronze, mapped ×4) → silver → publish → dbt source freshness → dbt build → DQ scorecard</text>
+  <text class="band-text" x="1222" y="104" text-anchor="end">max_active_runs=1 · catchup · retries w/ backoff</text>
+  <text class="band-text" x="1222" y="124" text-anchor="end">deadline alert 12:00 UTC · asset → claims_marts_consumers</text>
+
+  <!-- Zone 1: Vendors -->
+  <rect class="zone" x="40" y="160" width="170" height="390" rx="8"/>
+  <text class="zone-title" x="56" y="184">VENDOR FEEDS</text>
+  <text class="zone-sub" x="56" y="200">daily CSV + _manifest.json</text>
+  <rect class="box" x="56" y="216" width="138" height="48" rx="6"/>
+  <text class="box-title" x="68" y="236">Eligibility</text>
+  <text class="box-text" x="68" y="253">834-like roster</text>
+  <rect class="box" x="56" y="274" width="138" height="48" rx="6"/>
+  <text class="box-title" x="68" y="294">Providers</text>
+  <text class="box-text" x="68" y="311">NPI reference</text>
+  <rect class="box" x="56" y="332" width="138" height="48" rx="6"/>
+  <text class="box-title" x="68" y="352">Medical claims</text>
+  <text class="box-text" x="68" y="369">837-like, versioned</text>
+  <rect class="box" x="56" y="390" width="138" height="48" rx="6"/>
+  <text class="box-title" x="68" y="410">Pharmacy claims</text>
+  <text class="box-text" x="68" y="427">NCPDP-like fills</text>
+  <text class="box-text" x="56" y="466">late files · adjustments</text>
+  <text class="box-text" x="56" y="482">reversals · duplicates</text>
+  <text class="box-text" x="56" y="498">schema drift · bad rows</text>
+
+  <!-- Contract gate -->
+  <rect class="gate" x="236" y="290" width="120" height="96" rx="8"/>
+  <text class="box-title" x="296" y="314" text-anchor="middle">Contract gate</text>
+  <text class="box-text" x="296" y="332" text-anchor="middle">manifest · sha256</text>
+  <text class="box-text" x="296" y="347" text-anchor="middle">row count · columns</text>
+  <text class="box-text" x="296" y="362" text-anchor="middle">type parse ≤ 2%</text>
+  <text class="box-text" x="296" y="377" text-anchor="middle">additive drift OK</text>
+  <text class="label" x="296" y="408" text-anchor="middle" fill="#c2410c">reject whole delivery</text>
+
+  <!-- Zone 2: Lakehouse -->
+  <rect class="zone" x="380" y="160" width="300" height="390" rx="8"/>
+  <text class="zone-title" x="396" y="184">LAKEHOUSE · Spark 4 + Delta 4</text>
+  <text class="zone-sub" x="396" y="200">Databricks Asset Bundle / Unity Catalog</text>
+  <rect class="box" x="396" y="216" width="268" height="66" rx="6"/>
+  <text class="box-title" x="408" y="236">Bronze</text>
+  <text class="box-text" x="408" y="253">as delivered + lineage (_batch_date, _row_hash)</text>
+  <text class="box-text" x="408" y="269">replaceWhere per day · mergeSchema on drift</text>
+  <rect class="box" x="396" y="300" width="268" height="100" rx="6"/>
+  <text class="box-title" x="408" y="320">Silver</text>
+  <text class="box-text" x="408" y="337">dedupe · try_cast to contract · expectations</text>
+  <text class="box-text" x="408" y="353">claim history MERGE (every version)</text>
+  <text class="box-text" x="408" y="369">current = highest version, any arrival order</text>
+  <text class="box-text" x="408" y="385">stale lines deleted when a claim shrinks</text>
+  <rect class="quar" x="396" y="416" width="268" height="48" rx="6"/>
+  <text class="box-title" x="408" y="436">Quarantine</text>
+  <text class="box-text" x="408" y="453">bad rows + _failed_rules (every broken rule)</text>
+  <text class="box-text" x="396" y="486">time travel restore · OPTIMIZE ZORDER(member_id)</text>
+  <text class="box-text" x="396" y="502">Parquet export → exchange (stage)</text>
+
+  <!-- Zone 3: Snowflake -->
+  <rect class="zone" x="704" y="160" width="250" height="390" rx="8"/>
+  <text class="zone-title" x="720" y="184">SNOWFLAKE</text>
+  <text class="zone-sub" x="720" y="200">platform as code · versioned migrations</text>
+  <rect class="box" x="720" y="216" width="218" height="84" rx="6"/>
+  <text class="box-title" x="732" y="236">RAW.CLAIMS</text>
+  <text class="box-text" x="732" y="253">REMOVE · PUT · BEGIN</text>
+  <text class="box-text" x="732" y="269">DELETE · COPY INTO · audit · COMMIT</text>
+  <text class="box-text" x="732" y="285">no SWAP: policies stay attached</text>
+  <rect class="gov" x="720" y="316" width="218" height="84" rx="6"/>
+  <text class="box-title" x="732" y="336">Governance</text>
+  <text class="box-text" x="732" y="353">PII tag → masking policies</text>
+  <text class="box-text" x="732" y="369">row access by line of business</text>
+  <text class="box-text" x="732" y="385">least-privilege functional roles</text>
+  <rect class="box" x="720" y="416" width="218" height="48" rx="6"/>
+  <text class="box-title" x="732" y="436">Compute</text>
+  <text class="box-text" x="732" y="453">3 warehouses + resource monitors</text>
+  <text class="box-text" x="720" y="486">local dev &amp; CI: DuckDB, same loader</text>
+  <text class="box-text" x="720" y="502">tests: fakesnow · sqlfluff</text>
+
+  <!-- Zone 4: dbt -->
+  <rect class="zone" x="978" y="160" width="262" height="390" rx="8"/>
+  <text class="zone-title" x="994" y="184">dbt · ANALYTICS</text>
+  <text class="zone-sub" x="994" y="200">contracts · unit tests · freshness</text>
+  <rect class="box" x="994" y="216" width="230" height="48" rx="6"/>
+  <text class="box-title" x="1006" y="236">Staging</text>
+  <text class="box-text" x="1006" y="253">typed views · names dropped</text>
+  <rect class="box" x="994" y="274" width="230" height="64" rx="6"/>
+  <text class="box-title" x="1006" y="294">Snapshot + intermediate</text>
+  <text class="box-text" x="1006" y="311">SCD2 members (roster-dated)</text>
+  <text class="box-text" x="1006" y="327">member months · claim headers · stays</text>
+  <rect class="box" x="994" y="348" width="230" height="116" rx="6"/>
+  <text class="box-title" x="1006" y="368">Marts</text>
+  <text class="box-text" x="1006" y="385">fct_claims (incremental, delete+insert)</text>
+  <text class="box-text" x="1006" y="401">mart_pmpm · per-member-per-month cost</text>
+  <text class="box-text" x="1006" y="417">mart_utilization · per 1,000</text>
+  <text class="box-text" x="1006" y="433">mart_readmission_rates · 30-day</text>
+  <text class="box-text" x="1006" y="449">dim_members · dim_providers</text>
+  <text class="box-text" x="994" y="486">post-hook re-applies PII tags + row access</text>
+  <text class="box-text" x="994" y="502">exposures: finance, care management</text>
+
+  <!-- Flows -->
+  <path class="flow" d="M194,240 L214,240 M194,298 L214,298 M194,356 L214,356 M194,414 L214,414 M214,240 L214,414"/>
+  <path class="flow" d="M214,338 L236,338" marker-end="url(#arrow)"/>
+  <path class="flow" d="M356,338 C368,338 368,249 396,249" marker-end="url(#arrow)"/>
+  <path class="flow" d="M530,282 L530,300" marker-end="url(#arrow)"/>
+  <path class="flow" d="M530,400 L530,416" marker-end="url(#arrow)"/>
+  <path class="flow" d="M664,350 C690,350 690,258 720,258" marker-end="url(#arrow)"/>
+  <path class="flow" d="M938,258 L994,240" marker-end="url(#arrow)"/>
+  <path class="flow" d="M1109,264 L1109,274" marker-end="url(#arrow)"/>
+  <path class="flow" d="M1109,338 L1109,348" marker-end="url(#arrow)"/>
+  <path class="ctrl" d="M829,316 L829,300"/>
+  <path class="ctrl" d="M938,358 C962,358 962,406 994,406" marker-end="url(#arrow-dash)"/>
+
+  <!-- Footer: quality and CI -->
+  <rect class="zone" x="40" y="566" width="1200" height="38" rx="8"/>
+  <text class="box-text" x="58" y="590"><tspan font-weight="600" fill="#0f172a">Quality &amp; CI</tspan>   DQ scorecard per day (quarantine rate gate 2%) · Delta integration tests (replay, late reversal, drift, restore) · dbt tests + unit tests · DAG integrity tests · Snowflake migration tests · e2e replay idempotency check</text>
+</svg>
