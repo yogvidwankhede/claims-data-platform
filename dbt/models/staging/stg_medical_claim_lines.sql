@@ -1,0 +1,26 @@
+select
+    claim_id,
+    cast(claim_version as integer) as claim_version,
+    claim_status,
+    claim_type,
+    member_id,
+    billing_npi,
+    rendering_npi,
+    cast(service_from as date) as service_from,
+    cast(service_to as date) as service_to,
+    cast(admit_date as date) as admit_date,
+    cast(discharge_date as date) as discharge_date,
+    place_of_service,
+    {{ claim_setting('place_of_service') }} as setting,
+    primary_dx,
+    nullif(secondary_dx, '') as secondary_dx,
+    cast(line_number as integer) as line_number,
+    procedure_code,
+    cast(units as integer) as units,
+    cast(billed_amount as decimal(18, 2)) as billed_amount,
+    cast(allowed_amount as decimal(18, 2)) as allowed_amount,
+    -- a reversed or denied claim costs nothing, whatever the line amounts say
+    cast(case when claim_status = 'PAID' then paid_amount else 0 end as decimal(18, 2)) as net_paid_amount,
+    cast(paid_date as date) as paid_date,
+    cast(_batch_date as date) as batch_date
+from {{ source('raw', 'medical_claims_current') }}

@@ -1,0 +1,20 @@
+# Checked in: every value comes from the environment, so there are no secrets here.
+claims_analytics:
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('CLAIMS_DUCKDB_PATH', '../data/warehouse.duckdb') }}"
+      schema: main
+      threads: 4
+    prod:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT', '') }}"
+      user: "{{ env_var('SNOWFLAKE_USER', '') }}"
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH', '') }}"
+      role: TRANSFORMER
+      warehouse: TRANSFORM_WH
+      database: ANALYTICS
+      schema: DBT
+      threads: 8
+      query_tag: claims_analytics

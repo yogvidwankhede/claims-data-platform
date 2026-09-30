@@ -1,0 +1,47 @@
+version: 2
+
+models:
+  - name: stg_members
+    columns:
+      - name: member_id
+        data_tests: [unique, not_null]
+      - name: line_of_business
+        data_tests:
+          - accepted_values:
+              arguments: {values: [COMMERCIAL, MEDICARE, MEDICAID]}
+  - name: stg_providers
+    columns:
+      - name: npi
+        data_tests: [unique, not_null]
+  - name: stg_medical_claim_lines
+    data_tests:
+      - unique_combination:
+          arguments: {columns: [claim_id, line_number]}
+      - expression_is_true:
+          arguments: {expression: "service_to >= service_from"}
+    columns:
+      - name: claim_status
+        data_tests:
+          - accepted_values:
+              arguments: {values: [PAID, DENIED, REVERSED]}
+      - name: member_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('stg_members'), field: member_id}
+      - name: billing_npi
+        data_tests:
+          - relationships:
+              arguments: {to: ref('stg_providers'), field: npi}
+      - name: setting
+        data_tests:
+          - accepted_values:
+              arguments: {values: [inpatient, emergency, office, other]}
+  - name: stg_pharmacy_claims
+    columns:
+      - name: rx_claim_id
+        data_tests: [unique, not_null]
+      - name: member_id
+        data_tests:
+          - relationships:
+              arguments: {to: ref('stg_members'), field: member_id}

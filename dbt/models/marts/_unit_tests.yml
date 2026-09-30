@@ -1,0 +1,50 @@
+unit_tests:
+  - name: readmission_counts_only_admits_inside_the_window
+    description: >
+      Day 30 after discharge is in, day 31 is out, a stay is not its own readmission,
+      and a stay whose follow-up window is still open is flagged incomplete.
+    model: fct_readmissions
+    given:
+      - input: ref('int_inpatient_stays')
+        rows:
+          - {claim_id: A1, member_id: M1, admit_date: 2026-01-01, discharge_date: 2026-01-05, length_of_stay: 4}
+          - {claim_id: A2, member_id: M1, admit_date: 2026-02-04, discharge_date: 2026-02-06, length_of_stay: 2}
+          - {claim_id: B1, member_id: M2, admit_date: 2026-01-01, discharge_date: 2026-01-05, length_of_stay: 4}
+          - {claim_id: B2, member_id: M2, admit_date: 2026-02-05, discharge_date: 2026-02-07, length_of_stay: 2}
+          - {claim_id: C1, member_id: M3, admit_date: 2026-03-20, discharge_date: 2026-03-22, length_of_stay: 2}
+      - input: ref('int_claims')
+        rows:
+          - {service_from: 2026-03-31}
+    expect:
+      rows:
+        - {index_claim_id: A1, readmitted_within_window: true, next_admit_date: 2026-02-04, window_complete: true}
+        - {index_claim_id: A2, readmitted_within_window: false, next_admit_date: null, window_complete: true}
+        - {index_claim_id: B1, readmitted_within_window: false, next_admit_date: null, window_complete: true}
+        - {index_claim_id: B2, readmitted_within_window: false, next_admit_date: null, window_complete: true}
+        - {index_claim_id: C1, readmitted_within_window: false, next_admit_date: null, window_complete: false}
+
+  - name: pmpm_attributes_cost_to_the_plan_in_force_that_month
+    description: >
+      A member who moves from COMMERCIAL to MEDICAID in February counts once per month,
+      each month's claims go to that month's plan, and denied claims cost nothing.
+    model: mart_pmpm
+    given:
+      - input: ref('int_member_months')
+        rows:
+          - {member_id: M1, month_start: 2026-01-01, line_of_business: COMMERCIAL}
+          - {member_id: M1, month_start: 2026-02-01, line_of_business: MEDICAID}
+          - {member_id: M2, month_start: 2026-01-01, line_of_business: COMMERCIAL}
+      - input: ref('fct_claims')
+        rows:
+          - {member_id: M1, service_month: 2026-01-01, net_paid_amount: 100.00, paid_date: 2026-04-30}
+          - {member_id: M1, service_month: 2026-02-01, net_paid_amount: 40.00, paid_date: 2026-04-30}
+          - {member_id: M2, service_month: 2026-01-01, net_paid_amount: 0.00, paid_date: 2026-04-30}
+      - input: ref('fct_pharmacy_fills')
+        rows:
+          - {member_id: M2, fill_month: 2026-01-01, paid_amount: 20.00}
+    expect:
+      rows:
+        - {month_start: 2026-01-01, line_of_business: COMMERCIAL, member_months: 2, medical_paid: 100.00,
+           pharmacy_paid: 20.00, medical_pmpm: 50.00, pharmacy_pmpm: 10.00, total_pmpm: 60.00, runout_days: 89}
+        - {month_start: 2026-02-01, line_of_business: MEDICAID, member_months: 1, medical_paid: 40.00,
+           pharmacy_paid: 0.00, medical_pmpm: 40.00, pharmacy_pmpm: 0.00, total_pmpm: 40.00, runout_days: 61}

@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: int_member_history
+    data_tests:
+      - unique_combination:
+          arguments: {columns: [member_id, valid_from]}
+      - expression_is_true:
+          arguments: {expression: "valid_to > valid_from"}
+  - name: int_member_months
+    data_tests:
+      - unique_combination:
+          arguments: {columns: [member_id, month_start]}
+  - name: int_claims
+    columns:
+      - name: claim_id
+        data_tests: [unique, not_null]
+      - name: claim_version
+        data_tests: [not_null]
+  - name: int_inpatient_stays
+    columns:
+      - name: claim_id
+        data_tests: [unique]
+      - name: length_of_stay
+        data_tests:
+          - expression_is_true_col:
+              arguments: {expression: ">= 0"}

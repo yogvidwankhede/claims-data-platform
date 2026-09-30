@@ -1,0 +1,44 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Conformed tables published by the lakehouse and loaded by `claims-platform publish`.
+    database: "{{ 'RAW' if target.type == 'snowflake' else target.database }}"
+    schema: "{{ 'CLAIMS' if target.type == 'snowflake' else 'raw' }}"
+    # every load writes one audit row per table; freshness reads it, so a pipeline
+    # that silently stopped loading is caught even if the tables look fine
+    config:
+      freshness:
+        warn_after: {count: 26, period: hour}
+        error_after: {count: 50, period: hour}
+    tables:
+      - name: members
+        description: Current member roster (full snapshot each day).
+        config:
+          loaded_at_query: "select max(loaded_at) from {{ 'RAW.CLAIMS' if target.type == 'snowflake' else 'raw' }}._load_audit where lower(table_name) = 'members'"
+        columns:
+          - name: member_id
+            data_tests: [unique, not_null]
+      - name: providers
+        config:
+          loaded_at_query: "select max(loaded_at) from {{ 'RAW.CLAIMS' if target.type == 'snowflake' else 'raw' }}._load_audit where lower(table_name) = 'providers'"
+        columns:
+          - name: npi
+            data_tests: [unique, not_null]
+      - name: medical_claims_current
+        description: Latest version of every claim line; superseded versions are already removed upstream.
+        config:
+          loaded_at_query: "select max(loaded_at) from {{ 'RAW.CLAIMS' if target.type == 'snowflake' else 'raw' }}._load_audit where lower(table_name) = 'medical_claims_current'"
+        data_tests:
+          - unique_combination:
+              arguments: {columns: [claim_id, line_number]}
+      - name: pharmacy_claims
+        config:
+          loaded_at_query: "select max(loaded_at) from {{ 'RAW.CLAIMS' if target.type == 'snowflake' else 'raw' }}._load_audit where lower(table_name) = 'pharmacy_claims'"
+        columns:
+          - name: rx_claim_id
+            data_tests: [unique, not_null]
+      - name: _load_audit
+        description: One row per table per load, written in the same transaction as the load.
+        config:
+          freshness: null

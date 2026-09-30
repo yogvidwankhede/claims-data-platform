@@ -1,0 +1,171 @@
+version: 2
+
+# Marts are the interface to analysts and BI: their shape is a contract. A change
+# that renames, drops or retypes a column fails the build instead of breaking a
+# dashboard the next morning.
+
+models:
+  - name: dim_members
+    description: One row per member, current attributes. Names never leave RAW.
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: member_id
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests: [unique]
+      - name: line_of_business
+        data_type: varchar
+        data_tests:
+          - accepted_values:
+              arguments: {values: [COMMERCIAL, MEDICARE, MEDICAID]}
+      - name: zip3
+        data_type: varchar
+      - name: gender
+        data_type: varchar
+      - name: birth_date
+        data_type: date
+        description: Masked to 1 January of the birth year for roles without PHI access.
+        meta: {pii: date_of_birth}
+      - name: age
+        data_type: integer
+      - name: age_band
+        data_type: varchar
+        data_tests:
+          - accepted_values:
+              arguments: {values: ["0-17", "18-44", "45-64", "65+"]}
+      - name: coverage_start
+        data_type: date
+      - name: coverage_end
+        data_type: date
+      - name: history_versions
+        data_type: integer
+
+  - name: dim_providers
+    columns:
+      - name: npi
+        data_tests: [unique, not_null]
+
+  - name: fct_claims
+    description: One row per claim at its latest version. Incremental (delete+insert on claim_id).
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - expression_is_true:
+          arguments: {expression: "net_paid_amount = 0 or claim_status = 'PAID'"}
+      - expression_is_true:
+          arguments: {expression: "net_paid_amount <= allowed_amount * 1.5"}
+          config: {severity: warn}
+    columns:
+      - {name: claim_id, data_type: varchar, constraints: [{type: not_null}], data_tests: [unique]}
+      - {name: claim_version, data_type: integer}
+      - {name: claim_status, data_type: varchar}
+      - {name: claim_type, data_type: varchar}
+      - {name: setting, data_type: varchar}
+      - name: member_id
+        data_type: varchar
+        data_tests:
+          - relationships:
+              arguments: {to: ref('dim_members'), field: member_id}
+      - name: billing_npi
+        data_type: varchar
+        data_tests:
+          - relationships:
+              arguments: {to: ref('dim_providers'), field: npi}
+      - {name: service_from, data_type: date}
+      - {name: service_to, data_type: date}
+      - {name: service_month, data_type: date}
+      - {name: admit_date, data_type: date}
+      - {name: discharge_date, data_type: date}
+      - {name: primary_dx, data_type: varchar}
+      - {name: secondary_dx, data_type: varchar}
+      - {name: line_count, data_type: bigint}
+      - {name: billed_amount, data_type: "decimal(18,2)"}
+      - {name: allowed_amount, data_type: "decimal(18,2)"}
+      - {name: net_paid_amount, data_type: "decimal(18,2)"}
+      - {name: paid_date, data_type: date}
+      - {name: batch_date, data_type: date}
+
+  - name: fct_pharmacy_fills
+    columns:
+      - name: rx_claim_id
+        data_tests: [unique, not_null]
+
+  - name: fct_readmissions
+    columns:
+      - name: index_claim_id
+        data_tests: [unique, not_null]
+      - name: next_admit_date
+        data_tests:
+          - expression_is_true_col:
+              arguments: {expression: "is null or next_admit_date > discharge_date"}
+
+  - name: mart_pmpm
+    description: Medical, pharmacy and total cost per member per month, by line of business.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - unique_combination:
+          arguments: {columns: [month_start, line_of_business]}
+      # every paid claim must land in some member-month; a leak means the denominator is wrong
+      - pmpm_reconciles_to_claims
+    columns:
+      - {name: month_start, data_type: date}
+      - {name: line_of_business, data_type: varchar}
+      - {name: member_months, data_type: bigint}
+      - {name: medical_paid, data_type: "decimal(18,2)"}
+      - {name: pharmacy_paid, data_type: "decimal(18,2)"}
+      - {name: medical_pmpm, data_type: "decimal(18,2)"}
+      - {name: pharmacy_pmpm, data_type: "decimal(18,2)"}
+      - {name: total_pmpm, data_type: "decimal(18,2)"}
+      - {name: runout_days, data_type: integer}
+
+  - name: mart_utilization
+    description: Inpatient admits, ER visits and office visits per 1,000 member-years.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - unique_combination:
+          arguments: {columns: [month_start, line_of_business]}
+    columns:
+      - {name: month_start, data_type: date}
+      - {name: line_of_business, data_type: varchar}
+      - {name: member_months, data_type: bigint}
+      - {name: inpatient_admits, data_type: bigint}
+      - {name: er_visits, data_type: bigint}
+      - {name: office_visits, data_type: bigint}
+      - {name: admits_per_1000, data_type: "decimal(18,1)"}
+      - {name: er_visits_per_1000, data_type: "decimal(18,1)"}
+      - {name: office_visits_per_1000, data_type: "decimal(18,1)"}
+
+  - name: mart_readmission_rates
+    description: 30-day all-cause readmission rate by discharge month and line of business.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - unique_combination:
+          arguments: {columns: [discharge_month, line_of_business]}
+    columns:
+      - {name: discharge_month, data_type: date}
+      - {name: line_of_business, data_type: varchar}
+      - {name: index_stays, data_type: bigint}
+      - {name: readmissions, data_type: bigint}
+      - name: readmission_rate
+        data_type: "decimal(6,4)"
+        data_tests:
+          - expression_is_true_col:
+              arguments: {expression: "between 0 and 1"}
+
+exposures:
+  - name: finance_cost_dashboard
+    type: dashboard
+    maturity: medium
+    description: Monthly PMPM and utilization trend by line of business, reviewed in the finance close.
+    depends_on: [ref('mart_pmpm'), ref('mart_utilization')]
+    owner: {name: Healthcare Economics, email: healthcare-economics@example.com}
+  - name: care_management_readmissions
+    type: analysis
+    maturity: medium
+    description: Readmission rates feeding the transitional-care outreach program.
+    depends_on: [ref('mart_readmission_rates'), ref('fct_readmissions')]
+    owner: {name: Care Management Analytics, email: care-analytics@example.com}

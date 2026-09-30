@@ -1,0 +1,25 @@
+unit_tests:
+  - name: member_months_follow_scd2_history_and_coverage
+    description: >
+      The first snapshot version reaches back before snapshots began; a plan change
+      on 2026-02-10 applies from March (the first month starting after it); partial
+      months at either end of coverage count.
+    model: int_member_months
+    given:
+      - input: ref('int_member_history')
+        rows:
+          - {member_id: M1, line_of_business: COMMERCIAL, coverage_start: 2025-11-15, coverage_end: 2026-03-20,
+             valid_from: 1900-01-01, valid_to: 2026-02-10}
+          - {member_id: M1, line_of_business: MEDICAID, coverage_start: 2025-11-15, coverage_end: 2026-03-20,
+             valid_from: 2026-02-10, valid_to: 9999-12-31}
+      - input: ref('stg_medical_claim_lines')
+        rows:
+          - {service_from: 2025-11-02}
+          - {service_from: 2026-04-10}
+    expect:
+      rows:
+        - {member_id: M1, month_start: 2025-11-01, line_of_business: COMMERCIAL}
+        - {member_id: M1, month_start: 2025-12-01, line_of_business: COMMERCIAL}
+        - {member_id: M1, month_start: 2026-01-01, line_of_business: COMMERCIAL}
+        - {member_id: M1, month_start: 2026-02-01, line_of_business: COMMERCIAL}
+        - {member_id: M1, month_start: 2026-03-01, line_of_business: MEDICAID}

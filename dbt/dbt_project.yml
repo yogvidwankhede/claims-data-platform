@@ -1,0 +1,42 @@
+name: claims_analytics
+version: "1.0.0"
+config-version: 2
+profile: claims_analytics
+require-dbt-version: [">=1.11.0", "<2.0.0"]
+
+model-paths: ["models"]
+snapshot-paths: ["snapshots"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  # incremental models reprocess claims loaded in the last N days, so late
+  # adjustments to recent batches are picked up without a full refresh
+  lookback_days: 3
+  # readmission windows need 30 days of follow-up after discharge
+  readmission_window_days: 30
+
+flags:
+  require_explicit_package_overrides_for_builtin_materializations: true
+
+models:
+  claims_analytics:
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: view
+      +schema: intermediate
+    marts:
+      +materialized: table
+      +schema: marts
+      # analysts read marts only; on Snowflake the ANALYST role gets SELECT and
+      # PII-tagged columns are masked by the tag's policy (see snowflake/migrations/V004)
+      +grants: "{{ {'select': ['ANALYST']} if target.type == 'snowflake' else {} }}"
+      +post-hook:
+        - "{{ apply_governance() }}"
+
+snapshots:
+  claims_analytics:
+    +target_schema: snapshots
